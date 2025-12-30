@@ -187,58 +187,6 @@ sequenceDiagram
     Spike->>Email: ✉️ Resolution Summary
 ```
 
-## 📊 Service Health Matrix
-
-```mermaid
-graph LR
-    subgraph "Tenant: client1.hub.fixpliance.ai"
-        A1[Web UI ✅ 99.8%]
-        A2[Root ✅ 99.9%]
-        A3[Audit Vault API ✅ 99.5%]
-        A4[Consumer API ✅ 99.7%]
-        A5[Vigilant API ✅ 99.6%]
-        A6[Node Monitor API ✅ 99.4%]
-        A7[Scheduler API ✅ 99.3%]
-    end
-    
-    subgraph "Tenant: development"
-        B1[SonarQube ✅ 98.5%]
-        B2[Grafana ✅ 99.1%]
-        B3[ArgoCD ✅ 98.8%]
-    end
-    
-    subgraph "Overall Health"
-        C1[Frontend: 99.85%]
-        C2[Backend APIs: 99.5%]
-        C3[DevOps: 98.8%]
-        C4[Total: 99.4%]
-    end
-    
-    A1 --> C1
-    A2 --> C1
-    
-    A3 --> C2
-    A4 --> C2
-    A5 --> C2
-    A6 --> C2
-    A7 --> C2
-    
-    B1 --> C3
-    B2 --> C3
-    B3 --> C3
-    
-    C1 --> C4
-    C2 --> C4
-    C3 --> C4
-    
-    style C4 fill:#6bcf7f
-    style A1 fill:#6bcf7f
-    style A2 fill:#6bcf7f
-    style A3 fill:#6bcf7f
-```
-
----
-
 ## 🔧 Uptime Kuma Webhook Payload (Updated)
 
 ### **Custom Body for Multi-Tenant Monitoring:**
