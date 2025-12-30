@@ -13,9 +13,9 @@
 | **Vigilant API** | `https://{tenant}.hub.fixpliance.ai/api/vigilant/v1/health` | HTTP GET | Monitoring & analysis |
 | **Node Monitor API** | `https://{tenant}.hub.fixpliance.ai/api/node-monitor/v1/health` | HTTP GET | Infrastructure monitoring |
 | **Scheduler API** | `https://{tenant}.hub.fixpliance.ai/api/scheduler/v1/health` | HTTP GET | Job scheduling service |
-| **SonarQube** | `https://development.hub.fixpliance.ai/sonarqube` | HTTP GET | Code quality analysis |
-| **Grafana** | `https://development.hub.fixpliance.ai/grafana/healthz` | HTTP GET | Metrics visualization |
-| **ArgoCD** | `https://development.hub.fixpliance.ai/argocd/healthz` | HTTP GET | GitOps deployment |
+| **SonarQube** | `https://{tenant}.hub.fixpliance.ai/sonarqube` | HTTP GET | Code quality analysis |
+| **Grafana** | `https://{tenant}.hub.fixpliance.ai/grafana/healthz` | HTTP GET | Metrics visualization |
+| **ArgoCD** | `https://{tenant}.hub.fixpliance.ai/argocd/healthz` | HTTP GET | GitOps deployment |
 
 **Tenant Variables:**
 - `development` - Development environment
