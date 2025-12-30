@@ -135,7 +135,7 @@ sequenceDiagram
     
     Note over Cust: Professional release notes<br/>Clear upgrade path<br/>Easy to understand
     
-    Docker->>Cust: docker pull app:1.3.0
+    Docker->>Cust: With the help of Argocd we can upgrade the images
     
     Note over Dev,Cust: Total time: <br/>Zero manual work<br/>Perfect documentation
 ```
