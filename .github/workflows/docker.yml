@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main, master ]
 
+# Prevent concurrent releases
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: jyothiram266/doc-semver
 
@@ -29,12 +34,36 @@ jobs:
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest tag: $LATEST_TAG"
 
-      - name: Analyze commits for version bump
-        id: version_bump
+      - name: Check for new commits
+        id: check_commits
         run: |
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
           
-          # Get commits since last tag
+          # Count commits since last tag
+          if [ "$LATEST_TAG" = "0.0.0" ]; then
+            COMMIT_COUNT=$(git rev-list --count HEAD)
+          else
+            COMMIT_COUNT=$(git rev-list --count ${LATEST_TAG}..HEAD 2>/dev/null || echo "0")
+          fi
+          
+          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$COMMIT_COUNT" -eq 0 ]; then
+            echo "❌ No new commits since last tag ($LATEST_TAG)"
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "✅ Found $COMMIT_COUNT new commit(s) since last tag"
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Analyze commits for version bump
+        id: version_bump
+        if: steps.check_commits.outputs.has_commits == 'true'
+        run: |
+          LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
+          
+          # Get commits since last tag (use null delimiter for safety)
           if [ "$LATEST_TAG" = "0.0.0" ]; then
             COMMITS=$(git log --pretty=format:"%s" HEAD)
           else
@@ -50,20 +79,20 @@ jobs:
           HAS_FIX=false
           
           # Check for breaking changes (major) - highest priority
-          if echo "$COMMITS" | grep -qE "(major:|!:|^[a-zA-Z]+!:)"; then
+          # Patterns: major:, BREAKING CHANGE:, feat!:, fix!:, etc.
+          if echo "$COMMITS" | grep -qiE "(^major:|BREAKING CHANGE|^[a-zA-Z]+!:)"; then
             HAS_BREAKING=true
           fi
           
-
-          
           # Check for features (minor)
-          if echo "$COMMITS" | grep -qE "^minor:(\([^)]*\))?:"; then
+          # Patterns: feat:, feature:, minor:
+          if echo "$COMMITS" | grep -qiE "^(feat|feature|minor)(\([^)]*\))?:"; then
             HAS_FEATURE=true
           fi
           
-          
           # Check for fixes (patch)
-          if echo "$COMMITS" | grep -qE "^patch:(\([^)]*\))?:"; then
+          # Patterns: fix:, patch:, bugfix:
+          if echo "$COMMITS" | grep -qiE "^(fix|patch|bugfix)(\([^)]*\))?:"; then
             HAS_FIX=true
           fi
           
@@ -88,17 +117,30 @@ jobs:
 
       - name: Calculate new version
         id: new_version
+        if: steps.check_commits.outputs.has_commits == 'true'
         run: |
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
           BUMP_TYPE="${{ steps.version_bump.outputs.bump_type }}"
           
-          # Remove 'v' prefix if present
+          # Remove 'v' prefix if present and handle pre-release versions
           VERSION=${LATEST_TAG#v}
+          # Strip any pre-release suffix (e.g., -beta, -rc.1)
+          VERSION=$(echo "$VERSION" | sed 's/-.*$//')
           
           # Split version into parts
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
-          # Ensure we have valid numbers
+          # Ensure we have valid numbers (handle missing parts)
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          
+          # Remove any non-numeric characters
+          MAJOR=$(echo "$MAJOR" | grep -o '[0-9]*' | head -1)
+          MINOR=$(echo "$MINOR" | grep -o '[0-9]*' | head -1)
+          PATCH=$(echo "$PATCH" | grep -o '[0-9]*' | head -1)
+          
+          # Default to 0 if empty after cleaning
           MAJOR=${MAJOR:-0}
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
@@ -129,16 +171,33 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "Bump type: $BUMP_TYPE"
 
+      - name: Check if version already exists
+        id: check_version
+        if: steps.check_commits.outputs.has_commits == 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
+          
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "❌ ERROR: Tag v$NEW_VERSION already exists!"
+            echo "This might indicate a race condition or manual tag creation."
+            exit 1
+          else
+            echo "✅ Version v$NEW_VERSION is available"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.check_commits.outputs.has_commits == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        if: steps.check_commits.outputs.has_commits == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
+        if: steps.check_commits.outputs.has_commits == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -153,26 +212,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create Git tag
-        run: |
-          NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git tag "v$NEW_VERSION"
-          git push origin "v$NEW_VERSION"
-
       - name: Generate detailed release notes
         id: release_notes
+        if: steps.check_commits.outputs.has_commits == 'true'
         run: |
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
           NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
           BUMP_TYPE="${{ steps.version_bump.outputs.bump_type }}"
           
-          # Get commit data with more details
+          # Get commit data with more details (using tab as delimiter to avoid pipe issues)
           if [ "$LATEST_TAG" = "0.0.0" ]; then
-            RAW_COMMITS=$(git log --pretty=format:"%H|%s|%an|%ad|%b" --date=short HEAD)
+            RAW_COMMITS=$(git log --pretty=format:"%H%x09%s%x09%an%x09%ad%x09%b" --date=short HEAD)
           else
-            RAW_COMMITS=$(git log --pretty=format:"%H|%s|%an|%ad|%b" --date=short ${LATEST_TAG}..HEAD)
+            RAW_COMMITS=$(git log --pretty=format:"%H%x09%s%x09%an%x09%ad%x09%b" --date=short ${LATEST_TAG}..HEAD)
           fi
           
           # Initialize arrays for different commit types
@@ -183,33 +235,46 @@ jobs:
           CHORES=""
           OTHER=""
           
+          # Function to escape markdown special characters
+          escape_markdown() {
+            echo "$1" | sed 's/\*/\\*/g; s/_/\\_/g; s/`/\\`/g'
+          }
+          
           # Process each commit
-          while IFS='|' read -r hash subject author date body; do
+          while IFS=$'\t' read -r hash subject author date body; do
             if [ -z "$hash" ]; then continue; fi
             
-            # Create commit entry with author and date
-            COMMIT_ENTRY="- **${subject}** by @${author} on ${date} ([${hash:0:7}](https://github.com/${{ github.repository }}/commit/${hash}))"
+            # Escape markdown in subject
+            ESCAPED_SUBJECT=$(escape_markdown "$subject")
             
-            # Add body if it exists and is not empty
+            # Create commit entry with author and date
+            COMMIT_ENTRY="- **${ESCAPED_SUBJECT}** by @${author} on ${date} ([${hash:0:7}](https://github.com/${{ github.repository }}/commit/${hash}))"
+            
+            # Add body if it exists and is not empty (limit to first 200 chars to avoid huge notes)
             if [ ! -z "$body" ] && [ "$body" != " " ]; then
+              BODY_PREVIEW=$(echo "$body" | head -c 200)
+              if [ ${#body} -gt 200 ]; then
+                BODY_PREVIEW="${BODY_PREVIEW}..."
+              fi
+              ESCAPED_BODY=$(escape_markdown "$BODY_PREVIEW")
               COMMIT_ENTRY="${COMMIT_ENTRY}
-                > ${body}"
+                > ${ESCAPED_BODY}"
             fi
             
-            # Categorize commits
-            if echo "$subject" | grep -qE "(BREAKING CHANGE|!:|^[a-zA-Z]+!:)" || echo "$subject $body" | grep -qiE "(break|breaking|major)"; then
+            # Categorize commits (case-insensitive matching)
+            if echo "$subject" | grep -qiE "(BREAKING CHANGE|^major:|^[a-zA-Z]+!:)" || echo "$body" | grep -qiE "BREAKING CHANGE"; then
               BREAKING_CHANGES="${BREAKING_CHANGES}${COMMIT_ENTRY}
           "
-            elif echo "$subject" | grep -qE "^feat(\([^)]*\))?:" || echo "$subject" | grep -qiE "(feat|feature|add|new)"; then
+            elif echo "$subject" | grep -qiE "^(feat|feature|minor)(\([^)]*\))?:"; then
               FEATURES="${FEATURES}${COMMIT_ENTRY}
           "
-            elif echo "$subject" | grep -qE "^fix(\([^)]*\))?:" || echo "$subject" | grep -qiE "(fix|bug)"; then
+            elif echo "$subject" | grep -qiE "^(fix|patch|bugfix)(\([^)]*\))?:"; then
               FIXES="${FIXES}${COMMIT_ENTRY}
           "
-            elif echo "$subject" | grep -qE "^docs?(\([^)]*\))?:" || echo "$subject" | grep -qiE "(doc|documentation|readme)"; then
+            elif echo "$subject" | grep -qiE "^docs?(\([^)]*\))?:"; then
               DOCS="${DOCS}${COMMIT_ENTRY}
           "
-            elif echo "$subject" | grep -qE "^(chore|ci|build|test)(\([^)]*\))?:" || echo "$subject" | grep -qiE "(chore|maintenance|deps|dependencies)"; then
+            elif echo "$subject" | grep -qiE "^(chore|ci|build|test|refactor|style|perf)(\([^)]*\))?:"; then
               CHORES="${CHORES}${COMMIT_ENTRY}
           "
             else
@@ -219,15 +284,19 @@ jobs:
           done <<< "$RAW_COMMITS"
           
           # Get release statistics
-          TOTAL_COMMITS=$(echo "$RAW_COMMITS" | grep -v '^$' | wc -l)
-          CONTRIBUTORS=$(git log --pretty=format:"%an" ${LATEST_TAG}..HEAD 2>/dev/null | sort | uniq | wc -l)
+          TOTAL_COMMITS=${{ steps.check_commits.outputs.commit_count }}
+          
+          # Get unique contributors
           if [ "$LATEST_TAG" = "0.0.0" ]; then
-            CONTRIBUTORS=$(git log --pretty=format:"%an" HEAD | sort | uniq | wc -l)
+            CONTRIBUTORS=$(git log --pretty=format:"%an" HEAD | sort -u | wc -l)
+          else
+            CONTRIBUTORS=$(git log --pretty=format:"%an" ${LATEST_TAG}..HEAD | sort -u | wc -l)
           fi
           
-          # Get files changed
+          # Get files changed (with safer calculation)
           if [ "$LATEST_TAG" = "0.0.0" ]; then
-            FILES_CHANGED=$(git diff --name-only HEAD~${TOTAL_COMMITS} HEAD 2>/dev/null | wc -l || echo "0")
+            # For first release, compare against empty tree
+            FILES_CHANGED=$(git diff --name-only $(git hash-object -t tree /dev/null) HEAD 2>/dev/null | wc -l || echo "0")
           else
             FILES_CHANGED=$(git diff --name-only ${LATEST_TAG}..HEAD 2>/dev/null | wc -l || echo "0")
           fi
@@ -251,7 +320,7 @@ jobs:
           # Generate Docker pull commands
           DOCKER_COMMANDS="
           \`\`\`bash
-          # Pull the latest version
+          # Pull the specific version
           docker pull ${{ env.IMAGE_NAME }}:${NEW_VERSION}
           
           # Or pull the latest tag
@@ -259,7 +328,7 @@ jobs:
           \`\`\`"
           
           # Create comprehensive release notes
-          cat > release_notes.md << EOF
+          cat > release_notes.md << 'EOF'
           ${VERSION_IMPACT}
           
           ${VERSION_DESC}
@@ -274,7 +343,7 @@ jobs:
           | **Total Commits** | ${TOTAL_COMMITS} |
           | **Contributors** | ${CONTRIBUTORS} |
           | **Files Changed** | ${FILES_CHANGED} |
-          | **Release Date** | $(date '+%B %d, %Y') |
+          | **Release Date** | $(date -u '+%B %d, %Y') |
           
           ## 🐳 Docker Images
           
@@ -289,6 +358,17 @@ jobs:
           ## 📝 What's Changed
           
           EOF
+          
+          # Substitute variables in the template
+          sed -i "s/\${VERSION_IMPACT}/$VERSION_IMPACT/g" release_notes.md
+          sed -i "s/\${VERSION_DESC}/$VERSION_DESC/g" release_notes.md
+          sed -i "s/\${NEW_VERSION}/$NEW_VERSION/g" release_notes.md
+          sed -i "s/\${LATEST_TAG}/$LATEST_TAG/g" release_notes.md
+          sed -i "s/\${BUMP_TYPE\^}/$(echo $BUMP_TYPE | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')/g" release_notes.md
+          sed -i "s/\${TOTAL_COMMITS}/$TOTAL_COMMITS/g" release_notes.md
+          sed -i "s/\${CONTRIBUTORS}/$CONTRIBUTORS/g" release_notes.md
+          sed -i "s/\${FILES_CHANGED}/$FILES_CHANGED/g" release_notes.md
+          sed -i "s|\${DOCKER_COMMANDS}|$DOCKER_COMMANDS|g" release_notes.md
           
           # Add sections based on what changes exist
           if [ ! -z "$BREAKING_CHANGES" ]; then
@@ -344,7 +424,7 @@ jobs:
           
           ## 🔗 Links
           
-          - **Docker Hub**: [${IMAGE_NAME}](https://hub.docker.com/r/${IMAGE_NAME})
+          - **Docker Hub**: [${{ env.IMAGE_NAME }}](https://hub.docker.com/r/${{ env.IMAGE_NAME }})
           - **Source Code**: [v${NEW_VERSION}](https://github.com/${{ github.repository }}/tree/v${NEW_VERSION})
           - **Compare Changes**: [${LATEST_TAG}...v${NEW_VERSION}](https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${NEW_VERSION})
           
@@ -357,6 +437,13 @@ jobs:
           **Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${NEW_VERSION}
           EOF
           
+          # Check release notes size (GitHub limit is ~125KB)
+          NOTES_SIZE=$(wc -c < release_notes.md)
+          if [ $NOTES_SIZE -gt 120000 ]; then
+            echo "⚠️ Warning: Release notes are large (${NOTES_SIZE} bytes). GitHub limit is ~125KB."
+            echo "Consider splitting this release or summarizing commit messages."
+          fi
+          
           echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
           
           # Preview the release notes in the action log
@@ -364,20 +451,52 @@ jobs:
           cat release_notes.md
           echo "==============================="
 
-      - name: Create Release with Detailed Notes
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        if: steps.check_commits.outputs.has_commits == 'true'
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.new_version.outputs.new_version }}
-          release_name: "🚀 Release v${{ steps.new_version.outputs.new_version }}"
+          name: "🚀 Release v${{ steps.new_version.outputs.new_version }}"
           body_path: release_notes.md
           draft: false
           prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload release notes as artifact
+        if: steps.check_commits.outputs.has_commits == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: release-notes-v${{ steps.new_version.outputs.new_version }}
           path: release_notes.md
           retention-days: 90
+
+      - name: Summary
+        if: steps.check_commits.outputs.has_commits == 'true'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # 🚀 Release v${{ steps.new_version.outputs.new_version }} Published
+          
+          ## Summary
+          - **Previous Version**: ${{ steps.get_tag.outputs.latest_tag }}
+          - **New Version**: v${{ steps.new_version.outputs.new_version }}
+          - **Bump Type**: ${{ steps.version_bump.outputs.bump_type }}
+          - **Total Commits**: ${{ steps.check_commits.outputs.commit_count }}
+          
+          ## Docker Images
+          - \`${{ env.IMAGE_NAME }}:${{ steps.new_version.outputs.new_version }}\`
+          - \`${{ env.IMAGE_NAME }}:latest\`
+          
+          ## Links
+          - [View Release](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.new_version.outputs.new_version }})
+          - [Docker Hub](https://hub.docker.com/r/${{ env.IMAGE_NAME }})
+          EOF
+
+      - name: No changes summary
+        if: steps.check_commits.outputs.has_commits == 'false'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # ℹ️ No Release Created
+          
+          No new commits found since the last tag (${{ steps.get_tag.outputs.latest_tag }}).
+          No release or version bump is needed.
+          EOF
