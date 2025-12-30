@@ -317,18 +317,14 @@ jobs:
               ;;
           esac
           
-          # Generate Docker pull commands
-          DOCKER_COMMANDS="
-          \`\`\`bash
-          # Pull the specific version
-          docker pull ${{ env.IMAGE_NAME }}:${NEW_VERSION}
+          # Capitalize first letter of bump type
+          BUMP_TYPE_TITLE=$(echo "$BUMP_TYPE" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
           
-          # Or pull the latest tag
-          docker pull ${{ env.IMAGE_NAME }}:latest
-          \`\`\`"
+          # Get current date in UTC
+          RELEASE_DATE=$(date -u '+%B %d, %Y')
           
-          # Create comprehensive release notes
-          cat > release_notes.md << 'EOF'
+          # Create comprehensive release notes directly with bash variable substitution
+          cat > release_notes.md << EOF
           ${VERSION_IMPACT}
           
           ${VERSION_DESC}
@@ -339,11 +335,11 @@ jobs:
           |--------|-------|
           | **Version** | \`v${NEW_VERSION}\` |
           | **Previous Version** | \`${LATEST_TAG}\` |
-          | **Release Type** | ${BUMP_TYPE^} |
+          | **Release Type** | ${BUMP_TYPE_TITLE} |
           | **Total Commits** | ${TOTAL_COMMITS} |
           | **Contributors** | ${CONTRIBUTORS} |
           | **Files Changed** | ${FILES_CHANGED} |
-          | **Release Date** | $(date -u '+%B %d, %Y') |
+          | **Release Date** | ${RELEASE_DATE} |
           
           ## 🐳 Docker Images
           
@@ -353,22 +349,18 @@ jobs:
           - \`${{ env.IMAGE_NAME }}:latest\` - Latest release
           
           ### Quick Start
-          ${DOCKER_COMMANDS}
+          
+          \`\`\`bash
+          # Pull the specific version
+          docker pull ${{ env.IMAGE_NAME }}:${NEW_VERSION}
+          
+          # Or pull the latest tag
+          docker pull ${{ env.IMAGE_NAME }}:latest
+          \`\`\`
           
           ## 📝 What's Changed
           
           EOF
-          
-          # Substitute variables in the template
-          sed -i "s/\${VERSION_IMPACT}/$VERSION_IMPACT/g" release_notes.md
-          sed -i "s/\${VERSION_DESC}/$VERSION_DESC/g" release_notes.md
-          sed -i "s/\${NEW_VERSION}/$NEW_VERSION/g" release_notes.md
-          sed -i "s/\${LATEST_TAG}/$LATEST_TAG/g" release_notes.md
-          sed -i "s/\${BUMP_TYPE\^}/$(echo $BUMP_TYPE | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')/g" release_notes.md
-          sed -i "s/\${TOTAL_COMMITS}/$TOTAL_COMMITS/g" release_notes.md
-          sed -i "s/\${CONTRIBUTORS}/$CONTRIBUTORS/g" release_notes.md
-          sed -i "s/\${FILES_CHANGED}/$FILES_CHANGED/g" release_notes.md
-          sed -i "s|\${DOCKER_COMMANDS}|$DOCKER_COMMANDS|g" release_notes.md
           
           # Add sections based on what changes exist
           if [ ! -z "$BREAKING_CHANGES" ]; then
