@@ -1,4 +1,4 @@
-# Release Automation - Executive Summary
+# Release Automation
 
 ---
 
