@@ -208,23 +208,6 @@ sequenceDiagram
 }
 ```
 
-### **Example Monitors in Uptime Kuma:**
-
-| Monitor Name | URL | Description | Tags |
-|-------------|-----|-------------|------|
-| `client1-web-ui` | `https://client1.hub.fixpliance.ai/auditvault` | Web UI | `production, frontend, client1` |
-| `client1-auditvault-api` | `https://client1.hub.fixpliance.ai/api/auditvault/v1/health` | Audit Vault API | `production, api, critical, client1` |
-| `client1-consumer-api` | `https://client1.hub.fixpliance.ai/api/consumer/v1/health` | Consumer API | `production, api, client1` |
-| `client1-vigilant-api` | `https://client1.hub.fixpliance.ai/api/vigilant/v1/health` | Vigilant API | `production, api, client1` |
-| `client1-node-monitor-api` | `https://client1.hub.fixpliance.ai/api/node-monitor/v1/health` | Node Monitor API | `production, api, client1` |
-| `client1-scheduler-api` | `https://client1.hub.fixpliance.ai/api/scheduler/v1/health` | Scheduler API | `production, api, client1` |
-| `client1-root` | `https://client1.hub.fixpliance.ai/` | Root Domain | `production, frontend, client1` |
-| `dev-sonarqube` | `https://development.hub.fixpliance.ai/sonarqube` | SonarQube | `development, devops, sonarqube` |
-| `dev-grafana` | `https://development.hub.fixpliance.ai/grafana/healthz` | Grafana | `development, devops, monitoring` |
-| `dev-argocd` | `https://development.hub.fixpliance.ai/argocd/healthz` | ArgoCD | `development, devops, deployment` |
-
----
-
 ## 🔄 Service Recovery Flow
 
 ```mermaid
