@@ -6,13 +6,13 @@
 
 | Service | Endpoint Pattern | Check Type | Purpose |
 |---------|-----------------|------------|---------|
-| **Web UI** | `https://{tenant}.hub.fixpliance.ai/auditvault` | HTTP GET | Main application interface |
-| **Root** | `https://{tenant}.hub.fixpliance.ai/` | HTTP GET | Base domain health |
-| **Audit Vault API** | `https://{tenant}.hub.fixpliance.ai/api/auditvault/v1/health` | HTTP GET | Core audit management |
-| **Consumer API** | `https://{tenant}.hub.fixpliance.ai/api/consumer/v1/health` | HTTP GET | Data consumption service |
-| **Vigilant API** | `https://{tenant}.hub.fixpliance.ai/api/vigilant/v1/health` | HTTP GET | Monitoring & analysis |
-| **Node Monitor API** | `https://{tenant}.hub.fixpliance.ai/api/node-monitor/v1/health` | HTTP GET | Infrastructure monitoring |
-| **Scheduler API** | `https://{tenant}.hub.fixpliance.ai/api/scheduler/v1/health` | HTTP GET | Job scheduling service |
+| **Auditvault-Frontend** | `https://{tenant}.hub.fixpliance.ai/auditvault` | HTTP GET | Main application interface |
+| **CPWF** | `https://{tenant}.hub.fixpliance.ai/` | HTTP GET | Base domain health |
+| **AuditVault-Backend** | `https://{tenant}.hub.fixpliance.ai/api/auditvault/v1/health` | HTTP GET | Core audit management |
+| **Canalyzer** | `https://{tenant}.hub.fixpliance.ai/api/consumer/v1/health` | HTTP GET | Data consumption service |
+| **Canalyzer** | `https://{tenant}.hub.fixpliance.ai/api/vigilant/v1/health` | HTTP GET | Monitoring & analysis |
+| **Cmonitor** | `https://{tenant}.hub.fixpliance.ai/api/node-monitor/v1/health` | HTTP GET | Infrastructure monitoring |
+| **Cmonitor** | `https://{tenant}.hub.fixpliance.ai/api/scheduler/v1/health` | HTTP GET | Job scheduling service |
 | **SonarQube** | `https://{tenant}.hub.fixpliance.ai/sonarqube` | HTTP GET | Code quality analysis |
 | **Grafana** | `https://{tenant}.hub.fixpliance.ai/grafana/healthz` | HTTP GET | Metrics visualization |
 | **ArgoCD** | `https://{tenant}.hub.fixpliance.ai/argocd/healthz` | HTTP GET | GitOps deployment |
